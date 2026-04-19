@@ -266,6 +266,39 @@ function stopHeartbeat(roomCode) {
   }
 }
 
+/**
+ * Handle a member leaving — called from both explicit room:leave event and disconnect.
+ * Safe to call multiple times; exits early if socket is no longer in any room.
+ */
+function handleLeave(socket) {
+  const roomCode = roomManager.getRoomBySocket(socket.id);
+  if (!roomCode) return;
+
+  const room = roomManager.getRoom(roomCode);
+  if (!room) return;
+
+  const member = room.members.get(socket.id);
+  const memberName = member ? member.name : 'Unknown';
+
+  const result = roomManager.leaveRoom(roomCode, socket.id);
+
+  if (result && result.deleted) {
+    stopHeartbeat(roomCode);
+    queueManager.clearQueue(roomCode);
+    syncManager.clearPlayback(roomCode);
+    console.log(`[Room] Room ${roomCode} deleted (empty)`);
+  } else if (result && result.hostTransferred) {
+    io.to(roomCode).emit('room:host-transferred', {
+      newHostId: result.newHostId,
+      newHostName: result.newHostName,
+    });
+    io.to(roomCode).emit('room:member-left', { memberId: socket.id, memberName });
+    console.log(`[Room] Host transferred to ${result.newHostName} in room ${roomCode}`);
+  } else if (result) {
+    io.to(roomCode).emit('room:member-left', { memberId: socket.id, memberName });
+  }
+}
+
 io.on('connection', (socket) => {
   console.log(`[Connect] ${socket.id}`);
 
@@ -348,8 +381,6 @@ io.on('connection', (socket) => {
     if (!roomCode) return callback({ success: false, error: 'Không trong phòng nào' });
 
     const room = roomManager.getRoom(roomCode);
-    const isHost = room.hostId === socket.id;
-
     const member = room.members.get(socket.id);
     track.addedBy = member ? member.name : 'Unknown';
     track.addedBySocketId = socket.id;
@@ -595,46 +626,19 @@ io.on('connection', (socket) => {
     });
   });
 
-  // ─── Disconnect ───────────────────────
+  // ─── Leave / Disconnect ───────────────
+
+  /**
+   * Explicit leave — client sends this before disconnecting for immediate cleanup
+   */
+  socket.on('room:leave', (_, callback) => {
+    handleLeave(socket);
+    callback?.({ success: true });
+  });
 
   socket.on('disconnect', () => {
     console.log(`[Disconnect] ${socket.id}`);
-
-    const roomCode = roomManager.getRoomBySocket(socket.id);
-    if (!roomCode) return;
-
-    const room = roomManager.getRoom(roomCode);
-    if (!room) return;
-
-    const member = room.members.get(socket.id);
-    const memberName = member ? member.name : 'Unknown';
-    const isHost = room.hostId === socket.id;
-
-    const result = roomManager.leaveRoom(roomCode, socket.id);
-
-    if (result && result.deleted) {
-      // Room was deleted
-      stopHeartbeat(roomCode);
-      queueManager.clearQueue(roomCode);
-      syncManager.clearPlayback(roomCode);
-      console.log(`[Room] Room ${roomCode} deleted (empty)`);
-    } else if (result && result.hostTransferred) {
-      // Host was transferred
-      io.to(roomCode).emit('room:host-transferred', {
-        newHostId: result.newHostId,
-        newHostName: result.newHostName,
-      });
-      io.to(roomCode).emit('room:member-left', {
-        memberId: socket.id,
-        memberName,
-      });
-      console.log(`[Room] Host transferred to ${result.newHostName} in room ${roomCode}`);
-    } else if (result) {
-      io.to(roomCode).emit('room:member-left', {
-        memberId: socket.id,
-        memberName,
-      });
-    }
+    handleLeave(socket);
   });
 });
 

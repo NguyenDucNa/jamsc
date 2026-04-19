@@ -32,7 +32,6 @@ function createRoom(hostSocketId, hostName) {
     },
     members: new Map(),
     createdAt: new Date(),
-    hostDisconnectTimer: null,
   };
   // Add host as first member
   room.members.set(hostSocketId, {
@@ -63,12 +62,6 @@ function joinRoom(roomCode, socketId, memberName) {
     isHost: false,
     joinedAt: new Date(),
   });
-
-  // Clear host disconnect timer if host is reconnecting
-  if (room.hostDisconnectTimer) {
-    clearTimeout(room.hostDisconnectTimer);
-    room.hostDisconnectTimer = null;
-  }
 
   return { room };
 }
@@ -104,43 +97,6 @@ function leaveRoom(roomCode, socketId) {
   }
 
   return { room, hostTransferred: false };
-}
-
-/**
- * Handle host disconnect with grace period
- */
-function handleHostDisconnect(roomCode, socketId, onTimeout) {
-  const room = rooms.get(roomCode);
-  if (!room || room.hostId !== socketId) return;
-
-  // Grace period: 30 seconds
-  room.hostDisconnectTimer = setTimeout(() => {
-    const result = leaveRoom(roomCode, socketId);
-    if (onTimeout) onTimeout(result);
-  }, 30000);
-}
-
-/**
- * Reconnect host within grace period
- */
-function reconnectHost(roomCode, socketId, newSocketId) {
-  const room = rooms.get(roomCode);
-  if (!room) return null;
-
-  if (room.hostDisconnectTimer) {
-    clearTimeout(room.hostDisconnectTimer);
-    room.hostDisconnectTimer = null;
-  }
-
-  // Transfer host data to new socket
-  const hostData = room.members.get(socketId);
-  if (hostData) {
-    room.members.delete(socketId);
-    room.members.set(newSocketId, hostData);
-    room.hostId = newSocketId;
-  }
-
-  return room;
 }
 
 /**
@@ -202,8 +158,6 @@ module.exports = {
   createRoom,
   joinRoom,
   leaveRoom,
-  handleHostDisconnect,
-  reconnectHost,
   updateSettings,
   getRoom,
   getRoomBySocket,

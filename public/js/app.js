@@ -5,7 +5,6 @@
 
 const App = (() => {
   let currentRoomCode = null;
-  let syncState = null;
   let loadedTrackId = null;    // ID of the track currently loaded in the player
   let isLoadingTrack = false;  // True during the window after loadTrack is called
   let pendingSeekState = null; // Latest state to apply once loading completes
@@ -254,14 +253,12 @@ const App = (() => {
 
     // Sync events
     SocketClient.on('sync:state', (state) => {
-      syncState = state;
       state._receivedAt = Date.now();
       applyPlaybackState(state);
     });
 
-    SocketClient.on('sync:track-changed', ({ track, playback }) => {
+    SocketClient.on('sync:track-changed', ({ playback }) => {
       if (playback) {
-        syncState = playback;
         playback._receivedAt = Date.now();
         applyPlaybackState(playback);
       }
@@ -559,18 +556,16 @@ const App = (() => {
 
   function leaveRoom() {
     currentRoomCode = null;
-    syncState = null;
     loadedTrackId = null;
     isLoadingTrack = false;
     history.pushState(null, '', '/');
 
-    // Disconnect and reconnect
+    // Notify server immediately, then disconnect
     const socket = SocketClient.getSocket();
     if (socket) {
+      socket.emit('room:leave');
       socket.disconnect();
-      setTimeout(() => {
-        socket.connect();
-      }, 500);
+      setTimeout(() => socket.connect(), 500);
     }
 
     UI.showView('view-landing');

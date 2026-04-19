@@ -104,6 +104,8 @@ const Room = (() => {
 
     if (isHost) {
       UI.showToast('Bạn đã trở thành Host!', 'info');
+      // Re-render queue so drag handles appear for the new host
+      if (typeof Queue !== 'undefined') Queue.render();
     }
   }
 
