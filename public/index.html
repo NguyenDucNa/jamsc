@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="JAMSC - Ứng dụng nghe nhạc chung theo thời gian thực. Tạo phòng, mời bạn bè, và cùng thưởng thức âm nhạc." />
+  <title>JAMSC - Listen Together</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <!-- ─── Particles Background ─── -->
+  <canvas id="particles-canvas"></canvas>
+
+  <!-- ─── Landing View ─── -->
+  <div id="view-landing" class="view active">
+    <div class="landing-container">
+      <div class="logo-section">
+        <div class="logo-icon">
+          <svg viewBox="0 0 100 100" class="logo-svg">
+            <defs>
+              <linearGradient id="logo-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                <stop offset="0%" style="stop-color:#00f5d4" />
+                <stop offset="50%" style="stop-color:#7b2ff7" />
+                <stop offset="100%" style="stop-color:#f72585" />
+              </linearGradient>
+            </defs>
+            <circle cx="50" cy="50" r="45" fill="none" stroke="url(#logo-gradient)" stroke-width="3" />
+            <path d="M 35 25 L 35 75 L 72 50 Z" fill="url(#logo-gradient)" />
+          </svg>
+          <div class="logo-glow"></div>
+        </div>
+        <h1 class="logo-title">JAMSC</h1>
+        <p class="logo-subtitle">Listen Together, Feel Together</p>
+      </div>
+
+      <div class="landing-actions">
+        <button id="btn-create-room" class="btn btn-primary btn-glow">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+          Tạo Phòng
+        </button>
+        <button id="btn-join-room" class="btn btn-secondary">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+          Tham Gia Phòng
+        </button>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card glass-card">
+          <div class="feature-icon">🎵</div>
+          <h3>Đồng bộ hoàn hảo</h3>
+          <p>Nghe cùng lúc, cùng nhịp điệu</p>
+        </div>
+        <div class="feature-card glass-card">
+          <div class="feature-icon">🎧</div>
+          <h3>Đa nguồn nhạc</h3>
+          <p>YouTube, YouTube Music, SoundCloud</p>
+        </div>
+        <div class="feature-card glass-card">
+          <div class="feature-icon">👥</div>
+          <h3>Cùng bạn bè</h3>
+          <p>Chia sẻ mã phòng, mời tham gia</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Create Room View ─── -->
+  <div id="view-create" class="view">
+    <div class="form-container glass-card">
+      <button class="btn-back" id="btn-back-create">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <h2>Tạo Phòng Mới</h2>
+      <p class="form-desc">Nhập tên của bạn để tạo phòng nghe nhạc</p>
+      <form id="form-create">
+        <div class="input-group">
+          <label for="input-host-name">Tên của bạn</label>
+          <input type="text" id="input-host-name" placeholder="Nhập tên hiển thị..." maxlength="20" required autocomplete="off" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-glow btn-full">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+          Tạo Phòng
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─── Join Room View ─── -->
+  <div id="view-join" class="view">
+    <div class="form-container glass-card">
+      <button class="btn-back" id="btn-back-join">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+      </button>
+      <h2>Tham Gia Phòng</h2>
+      <p class="form-desc">Nhập mã phòng và tên bạn để vào phòng nghe nhạc</p>
+      <form id="form-join">
+        <div class="input-group">
+          <label for="input-room-code">Mã phòng</label>
+          <input type="text" id="input-room-code" placeholder="VD: ABC123" maxlength="6" required autocomplete="off" style="text-transform: uppercase; letter-spacing: 0.3em; text-align: center; font-size: 1.5rem;" />
+        </div>
+        <div class="input-group">
+          <label for="input-member-name">Tên của bạn</label>
+          <input type="text" id="input-member-name" placeholder="Nhập tên hiển thị..." maxlength="20" required autocomplete="off" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-glow btn-full">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+          Tham Gia
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ─── Room View ─── -->
+  <div id="view-room" class="view">
+    <div class="room-layout">
+      <!-- Header -->
+      <header class="room-header glass-card">
+        <div class="room-header-left">
+          <h2 class="room-title">JAMSC</h2>
+          <div class="room-code-wrapper">
+            <span class="room-code-label">Mã phòng:</span>
+            <span class="room-code" id="display-room-code">------</span>
+            <button class="btn-icon btn-copy" id="btn-copy-code" title="Sao chép mã phòng">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="room-header-right">
+          <div class="connection-status" id="connection-status">
+            <span class="status-dot"></span>
+            <span class="status-text">Đang kết nối</span>
+          </div>
+          <button class="btn-icon" id="btn-settings" title="Cài đặt phòng">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </button>
+          <button class="btn-icon btn-danger" id="btn-leave-room" title="Rời phòng">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <div class="room-content">
+        <!-- Player Section -->
+        <div class="player-section">
+          <!-- Add Track (moved to top) -->
+          <div class="add-track glass-card" id="add-track-section">
+            <form id="form-add-track" class="add-track-form">
+              <div class="input-with-btn">
+                <input type="url" id="input-track-url" placeholder="Dán link YouTube hoặc SoundCloud..." autocomplete="off" required />
+                <button type="submit" class="btn btn-primary btn-add" id="btn-add-track">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Now Playing -->
+          <div class="now-playing glass-card" id="now-playing">
+            <div class="now-playing-empty" id="now-playing-empty">
+              <div class="empty-icon">🎵</div>
+              <p>Chưa có bài nào đang phát</p>
+              <p class="empty-hint">Thêm bài hát vào hàng chờ để bắt đầu!</p>
+            </div>
+            <div class="now-playing-info" id="now-playing-info" style="display: none;">
+              <div class="now-playing-artwork">
+                <img id="now-playing-thumb" src="" alt="Album art" />
+                <div class="playing-indicator" id="playing-indicator">
+                  <span></span><span></span><span></span><span></span>
+                </div>
+              </div>
+              <div class="now-playing-details">
+                <div class="now-playing-source" id="now-playing-source">YouTube</div>
+                <h3 class="now-playing-title" id="now-playing-title">---</h3>
+                <p class="now-playing-added" id="now-playing-added">Thêm bởi ---</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Player Container (compact) -->
+          <div class="player-container glass-card">
+            <div class="player-wrapper">
+              <div id="youtube-player-container" class="player-embed">
+                <div id="youtube-player"></div>
+              </div>
+              <div id="soundcloud-player-container" class="player-embed" style="display: none;">
+                <iframe id="soundcloud-player"
+                  width="100%" height="166"
+                  scrolling="no" frameborder="no"
+                  allow="autoplay"
+                  src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/293&color=%237b2ff7&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false">
+                </iframe>
+              </div>
+            </div>
+
+            <!-- Controls -->
+            <div class="player-controls">
+              <div class="progress-container" id="progress-container">
+                <span class="time-current" id="time-current">0:00</span>
+                <div class="progress-bar" id="progress-bar">
+                  <div class="progress-fill" id="progress-fill"></div>
+                  <div class="progress-handle" id="progress-handle"></div>
+                </div>
+                <span class="time-duration" id="time-duration">0:00</span>
+              </div>
+              <div class="controls-row">
+                <button class="btn-control" id="btn-prev" title="Bài trước">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                </button>
+                <button class="btn-control btn-play" id="btn-play" title="Phát / Dừng">
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" id="icon-play"><path d="M8 5v14l11-7z"/></svg>
+                  <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" id="icon-pause" style="display:none"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                </button>
+                <button class="btn-control" id="btn-next" title="Bài tiếp">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                </button>
+                <div class="volume-control">
+                  <button class="btn-control btn-volume" id="btn-volume" title="Âm lượng">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="icon-volume-on"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 010 14.14M15.54 8.46a5 5 0 010 7.07"/></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="icon-volume-off" style="display:none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+                  </button>
+                  <input type="range" id="volume-slider" min="0" max="100" value="70" class="slider-volume" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="sidebar">
+          <!-- Queue -->
+          <div class="queue-panel glass-card">
+            <div class="panel-header">
+              <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                Hàng Chờ
+              </h3>
+              <span class="badge" id="queue-count">0</span>
+            </div>
+            <div class="queue-list" id="queue-list">
+              <div class="queue-empty">
+                <p>Hàng chờ trống</p>
+                <p class="queue-empty-hint">Thêm bài hát từ YouTube hoặc SoundCloud</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Members -->
+          <div class="members-panel glass-card">
+            <div class="panel-header">
+              <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                Thành Viên
+              </h3>
+              <span class="badge" id="member-count">0</span>
+            </div>
+            <div class="members-list" id="members-list"></div>
+          </div>
+
+          <!-- Chat -->
+          <div class="chat-panel glass-card">
+            <div class="panel-header">
+              <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                Chat
+              </h3>
+            </div>
+            <div class="chat-messages" id="chat-messages"></div>
+            <form id="form-chat" class="chat-input-form">
+              <input type="text" id="input-chat" placeholder="Nhắn tin..." maxlength="500" autocomplete="off" />
+              <button type="submit" class="btn-icon btn-send">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Settings Modal ─── -->
+  <div class="modal-overlay" id="modal-settings" style="display: none;">
+    <div class="modal glass-card">
+      <div class="modal-header">
+        <h3>Cài Đặt Phòng</h3>
+        <button class="btn-icon" id="btn-close-settings">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="setting-item">
+          <div class="setting-info">
+            <h4>Cho phép tua nhạc</h4>
+            <p>Thành viên có thể tua tới/lui trong bài hát</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="setting-allow-seek" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="setting-item">
+          <div class="setting-info">
+            <h4>Cho phép thêm bài hát</h4>
+            <p>Thành viên có thể thêm bài vào hàng chờ</p>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="setting-allow-queue" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Toast Container ─── -->
+  <div id="toast-container"></div>
+
+  <!-- ─── Scripts ─── -->
+  <script src="https://w.soundcloud.com/player/api.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/ui.js"></script>
+  <script src="/js/socket.js"></script>
+  <script src="/js/player.js"></script>
+  <script src="/js/queue.js"></script>
+  <script src="/js/room.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    // Load YouTube IFrame API
+    var tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    var firstScriptTag = document.getElementsByTagName('script')[0];
+    firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+  </script>
+</body>
+</html>
