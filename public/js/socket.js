@@ -10,11 +10,14 @@ const SocketClient = (() => {
   /**
    * Initialize socket connection
    */
+  // Backend URL — set BACKEND_URL in window or fallback to same origin (local dev)
+  const BACKEND_URL = window.BACKEND_URL || '';
+
   function connect() {
     if (socket && socket.connected) return socket;
 
-    socket = io({
-      transports: ['polling'],    // Polling only — Vercel doesn't support WebSocket
+    socket = io(BACKEND_URL, {
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: Infinity,
       reconnectionDelay: 1000,

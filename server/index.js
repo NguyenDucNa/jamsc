@@ -15,14 +15,12 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: '*',
+    origin: process.env.CORS_ORIGIN || '*',
     methods: ['GET', 'POST'],
   },
-  transports: ['polling'],   // Polling only — works on Vercel serverless
-  pingTimeout: 60000,         // 60s before considering connection dead
-  pingInterval: 25000,        // Ping every 25s
-  upgradeTimeout: 10000,
-  allowEIO3: true,            // Backwards compatibility
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 // Serve static files from public directory
@@ -522,11 +520,6 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 
-if (process.env.VERCEL) {
-  // Export for Vercel serverless
-  module.exports = server;
-} else {
-  server.listen(PORT, () => {
-    console.log(`\n  🎵 JAMSC Server running on http://localhost:${PORT}\n`);
-  });
-}
+server.listen(PORT, () => {
+  console.log(`\n  JAMSC Server running on http://localhost:${PORT}\n`);
+});
