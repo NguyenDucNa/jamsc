@@ -120,6 +120,15 @@ const Player = (() => {
    */
   function loadTrack(track) {
     stopProgressTracking();
+
+    // Stop currently playing source before loading new track
+    isExternalUpdate = true;
+    if (currentSource === 'youtube' && ytPlayer && isReady.youtube) {
+      ytPlayer.pauseVideo();
+    } else if (currentSource === 'soundcloud' && scWidget && isReady.soundcloud) {
+      scWidget.pause();
+    }
+
     currentSource = track.source;
     duration = track.duration || 0;
 

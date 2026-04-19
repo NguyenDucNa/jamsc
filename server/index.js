@@ -309,10 +309,11 @@ io.on('connection', (socket) => {
     const track = queueManager.skipToTrack(roomCode, trackId);
     if (!track) return callback({ success: false, error: 'Không tìm thấy bài hát' });
 
-    const state = syncManager.setTrack(roomCode, track);
+    syncManager.setTrack(roomCode, track);
+    const playState = syncManager.play(roomCode);
     io.to(roomCode).emit('sync:track-changed', {
       track,
-      playback: state,
+      playback: playState,
     });
 
     callback({ success: true });
@@ -395,8 +396,9 @@ io.on('connection', (socket) => {
 
     const nextTrack = queueManager.nextTrack(roomCode);
     if (nextTrack) {
-      const state = syncManager.setTrack(roomCode, nextTrack);
-      io.to(roomCode).emit('sync:track-changed', { track: nextTrack, playback: state });
+      syncManager.setTrack(roomCode, nextTrack);
+      const playState = syncManager.play(roomCode);
+      io.to(roomCode).emit('sync:track-changed', { track: nextTrack, playback: playState });
     }
     callback?.({ success: true });
   });
@@ -414,8 +416,9 @@ io.on('connection', (socket) => {
 
     const prevTrack = queueManager.prevTrack(roomCode);
     if (prevTrack) {
-      const state = syncManager.setTrack(roomCode, prevTrack);
-      io.to(roomCode).emit('sync:track-changed', { track: prevTrack, playback: state });
+      syncManager.setTrack(roomCode, prevTrack);
+      const playState = syncManager.play(roomCode);
+      io.to(roomCode).emit('sync:track-changed', { track: prevTrack, playback: playState });
     }
     callback?.({ success: true });
   });
