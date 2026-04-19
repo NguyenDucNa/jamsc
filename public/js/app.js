@@ -6,7 +6,6 @@
 const App = (() => {
   let currentRoomCode = null;
   let syncState = null;
-  let isSyncingState = false;
 
   // ─── Initialize ───────────────────────────
 
@@ -228,20 +227,6 @@ const App = (() => {
       }
     });
 
-    // Player callbacks
-    Player.onStateChange((state) => {
-      if (!Room.getIsHost()) return;
-      if (isSyncingState) return; // Ignore events triggered by applyPlaybackState
-
-      if (state === 'playing') {
-        Player.getCurrentTime().then((time) => {
-          SocketClient.emit('sync:play', { time });
-        });
-      } else if (state === 'paused') {
-        SocketClient.emit('sync:pause');
-      }
-    });
-
     Player.onTrackEnd(() => {
       if (Room.getIsHost()) {
         SocketClient.emit('sync:track-ended');
@@ -314,7 +299,6 @@ const App = (() => {
 
     SocketClient.on('sync:heartbeat', (state) => {
       if (!state || !state.currentTrack) return;
-      if (isSyncingState) return;
       Player.getCurrentTime().then((localTime) => {
         // Compensate for network latency when comparing positions
         const networkElapsed = (Date.now() - state.lastSyncAt) / 1000;
@@ -429,7 +413,6 @@ const App = (() => {
     }
 
     const seekAndPlay = () => {
-      isSyncingState = true;
       if (state.isPlaying) {
         const elapsed = (Date.now() - state.lastSyncAt) / 1000;
         const targetTime = state.currentTime + elapsed;
@@ -439,7 +422,6 @@ const App = (() => {
         Player.seekTo(state.currentTime);
         Player.pause();
       }
-      setTimeout(() => { isSyncingState = false; }, 1500);
     };
 
     // When track just loaded, wait for the player to initialize before seeking/playing
