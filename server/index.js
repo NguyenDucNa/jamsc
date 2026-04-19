@@ -516,6 +516,12 @@ io.on('connection', (socket) => {
 // ─── START SERVER ───────────────────────────────────────
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`\n  🎵 JAMSC Server running on http://localhost:${PORT}\n`);
-});
+
+if (process.env.VERCEL) {
+  // Export for Vercel serverless
+  module.exports = server;
+} else {
+  server.listen(PORT, () => {
+    console.log(`\n  🎵 JAMSC Server running on http://localhost:${PORT}\n`);
+  });
+}
