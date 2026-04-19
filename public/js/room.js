@@ -137,43 +137,20 @@ const Room = (() => {
     const btnPlay = document.getElementById('btn-play');
     const btnPrev = document.getElementById('btn-prev');
     const btnNext = document.getElementById('btn-next');
-    const progressBar = document.getElementById('progress-bar');
 
-    // Only host can play/pause/prev/next
-    if (btnPlay) {
-      if (isHost) {
-        btnPlay.classList.remove('disabled');
-      } else {
-        btnPlay.classList.add('disabled');
-      }
-    }
+    // Everyone can play/pause (host = broadcast, member = local)
+    if (btnPlay) btnPlay.classList.remove('disabled');
 
+    // Prev/Next: host always, members only if allowSkip
+    const canSkip = isHost || (currentRoom && currentRoom.settings.allowSkip);
     [btnPrev, btnNext].forEach((btn) => {
-      if (btn) {
-        if (isHost) {
-          btn.classList.remove('disabled');
-        } else {
-          btn.classList.add('disabled');
-        }
+      if (!btn) return;
+      if (canSkip) {
+        btn.classList.remove('disabled');
+      } else {
+        btn.classList.add('disabled');
       }
     });
-
-    // Seek permission
-    const canSeek = isHost || (currentRoom && currentRoom.settings.allowSeek);
-    if (progressBar) {
-      if (canSeek) {
-        progressBar.classList.remove('disabled');
-      } else {
-        progressBar.classList.add('disabled');
-      }
-    }
-
-    // Queue add permission
-    const canAddQueue = isHost || (currentRoom && currentRoom.settings.allowQueueAdd);
-    const addTrackSection = document.getElementById('add-track-section');
-    if (addTrackSection) {
-      addTrackSection.style.display = canAddQueue ? '' : 'none';
-    }
   }
 
   /**
@@ -182,11 +159,8 @@ const Room = (() => {
   function updateSettings() {
     if (!currentRoom) return;
 
-    const seekToggle = document.getElementById('setting-allow-seek');
-    const queueToggle = document.getElementById('setting-allow-queue');
-
-    if (seekToggle) seekToggle.checked = currentRoom.settings.allowSeek;
-    if (queueToggle) queueToggle.checked = currentRoom.settings.allowQueueAdd;
+    const skipToggle = document.getElementById('setting-allow-skip');
+    if (skipToggle) skipToggle.checked = !!currentRoom.settings.allowSkip;
 
     updateControlPermissions();
   }

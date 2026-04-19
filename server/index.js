@@ -247,11 +247,6 @@ io.on('connection', (socket) => {
     const room = roomManager.getRoom(roomCode);
     const isHost = room.hostId === socket.id;
 
-    // Check permission
-    if (!isHost && !room.settings.allowQueueAdd) {
-      return callback({ success: false, error: 'Host đã tắt quyền thêm bài hát' });
-    }
-
     const member = room.members.get(socket.id);
     track.addedBy = member ? member.name : 'Unknown';
     track.addedBySocketId = socket.id;
@@ -356,25 +351,6 @@ io.on('connection', (socket) => {
   });
 
   /**
-   * Seek
-   */
-  socket.on('sync:seek', ({ time }, callback) => {
-    const roomCode = roomManager.getRoomBySocket(socket.id);
-    if (!roomCode) return callback?.({ success: false });
-
-    const room = roomManager.getRoom(roomCode);
-    const isHost = room.hostId === socket.id;
-
-    if (!isHost && !room.settings.allowSeek) {
-      return callback?.({ success: false, error: 'Host đã tắt quyền tua' });
-    }
-
-    const state = syncManager.seek(roomCode, time);
-    io.to(roomCode).emit('sync:state', state);
-    callback?.({ success: true });
-  });
-
-  /**
    * Track ended - move to next
    */
   socket.on('sync:track-ended', (_, callback) => {
@@ -414,7 +390,8 @@ io.on('connection', (socket) => {
     if (!roomCode) return callback?.({ success: false });
 
     const room = roomManager.getRoom(roomCode);
-    if (room.hostId !== socket.id) return callback?.({ success: false, error: 'Chỉ host' });
+    const isHost = room.hostId === socket.id;
+    if (!isHost && !room.settings.allowSkip) return callback?.({ success: false, error: 'Chỉ host mới có quyền chuyển bài' });
 
     const nextTrack = queueManager.nextTrack(roomCode);
     if (nextTrack) {
@@ -432,7 +409,8 @@ io.on('connection', (socket) => {
     if (!roomCode) return callback?.({ success: false });
 
     const room = roomManager.getRoom(roomCode);
-    if (room.hostId !== socket.id) return callback?.({ success: false, error: 'Chỉ host' });
+    const isHost = room.hostId === socket.id;
+    if (!isHost && !room.settings.allowSkip) return callback?.({ success: false, error: 'Chỉ host mới có quyền chuyển bài' });
 
     const prevTrack = queueManager.prevTrack(roomCode);
     if (prevTrack) {

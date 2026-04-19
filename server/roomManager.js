@@ -28,8 +28,7 @@ function createRoom(hostSocketId, hostName) {
     hostId: hostSocketId,
     hostName: hostName,
     settings: {
-      allowSeek: false,
-      allowQueueAdd: true,
+      allowSkip: false,
     },
     members: new Map(),
     createdAt: new Date(),

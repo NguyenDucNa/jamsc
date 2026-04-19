@@ -14,6 +14,7 @@ const Player = (() => {
   let duration = 0;
   let isReady = { youtube: false, soundcloud: false };
   let volume = 70;
+  let pendingTrack = null; // Track to load once player is ready
 
   // ─── YouTube Player ───────────────────────
 
@@ -40,6 +41,11 @@ const Player = (() => {
           isReady.youtube = true;
           ytPlayer.setVolume(volume);
           console.log('[Player] YouTube ready');
+          if (pendingTrack && pendingTrack.source === 'youtube') {
+            const t = pendingTrack;
+            pendingTrack = null;
+            loadTrack(t);
+          }
         },
         onStateChange: (event) => {
           if (isExternalUpdate) return;
@@ -108,61 +114,89 @@ const Player = (() => {
   // ─── Unified Interface ────────────────────
 
   /**
-   * Load a track based on source type
+   * Load a track based on source type.
+   * Returns a Promise that resolves once the player starts loading the video.
+   * If the player is not ready yet, the track is queued for when it becomes ready.
    */
   function loadTrack(track) {
     stopProgressTracking();
     currentSource = track.source;
     duration = track.duration || 0;
 
-    // Toggle player visibility
     const ytContainer = document.getElementById('youtube-player-container');
     const scContainer = document.getElementById('soundcloud-player-container');
 
-    if (track.source === 'youtube') {
-      ytContainer.style.display = 'block';
-      scContainer.style.display = 'none';
+    return new Promise((resolve) => {
+      if (track.source === 'youtube') {
+        ytContainer.style.display = 'block';
+        scContainer.style.display = 'none';
 
-      if (ytPlayer && isReady.youtube) {
-        isExternalUpdate = true;
-        ytPlayer.loadVideoById({
-          videoId: track.sourceId,
-          startSeconds: 0,
-        });
-        // Don't autoplay - wait for sync:state
-        setTimeout(() => {
-          ytPlayer.pauseVideo();
-          isExternalUpdate = false;
-        }, 500);
-      }
-    } else if (track.source === 'soundcloud') {
-      ytContainer.style.display = 'none';
-      scContainer.style.display = 'block';
-
-      if (scWidget && isReady.soundcloud) {
-        isExternalUpdate = true;
-        scWidget.load(track.sourceId, {
-          auto_play: false,
-          show_artwork: true,
-          hide_related: true,
-          show_comments: false,
-          show_user: true,
-          show_reposts: false,
-          show_teaser: false,
-          color: '#7b2ff7',
-          callback: () => {
+        if (ytPlayer && isReady.youtube) {
+          isExternalUpdate = true;
+          ytPlayer.loadVideoById({ videoId: track.sourceId, startSeconds: 0 });
+          setTimeout(() => {
+            ytPlayer.pauseVideo();
             isExternalUpdate = false;
-            // Get duration
-            scWidget.getDuration((d) => {
-              duration = d / 1000;
-              updateDurationDisplay();
-            });
-          },
-        });
-      }
-    }
+            resolve();
+          }, 800);
+        } else {
+          // Player not ready — store and resolve when ready
+          pendingTrack = track;
+          // Resolve immediately so caller can still proceed after YouTube is ready
+          // The actual load will happen in onReady
+          const checkReady = setInterval(() => {
+            if (isReady.youtube && ytPlayer) {
+              clearInterval(checkReady);
+              // Only load if this track is still the pending one
+              if (pendingTrack && pendingTrack.sourceId === track.sourceId) {
+                pendingTrack = null;
+                isExternalUpdate = true;
+                ytPlayer.loadVideoById({ videoId: track.sourceId, startSeconds: 0 });
+                setTimeout(() => {
+                  ytPlayer.pauseVideo();
+                  isExternalUpdate = false;
+                  resolve();
+                }, 800);
+              } else {
+                resolve();
+              }
+            }
+          }, 200);
+        }
+      } else if (track.source === 'soundcloud') {
+        ytContainer.style.display = 'none';
+        scContainer.style.display = 'block';
 
-    updateDurationDisplay();
+        if (scWidget && isReady.soundcloud) {
+          isExternalUpdate = true;
+          scWidget.load(track.sourceId, {
+            auto_play: false,
+            show_artwork: true,
+            hide_related: true,
+            show_comments: false,
+            show_user: true,
+            show_reposts: false,
+            show_teaser: false,
+            color: '#7b2ff7',
+            callback: () => {
+              isExternalUpdate = false;
+              scWidget.getDuration((d) => {
+                duration = d / 1000;
+                updateDurationDisplay();
+              });
+              resolve();
+            },
+          });
+        } else {
+          pendingTrack = track;
+          resolve();
+        }
+      } else {
+        resolve();
+      }
+
+      updateDurationDisplay();
+    });
   }
 
   /**

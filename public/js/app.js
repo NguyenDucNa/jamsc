@@ -6,6 +6,8 @@
 const App = (() => {
   let currentRoomCode = null;
   let syncState = null;
+  let loadedTrackId = null;   // ID of the track currently loaded in the player
+  let isLoadingTrack = false; // True during the window after loadTrack is called
 
   // ─── Initialize ───────────────────────────
 
@@ -137,12 +139,8 @@ const App = (() => {
     });
 
     // Setting toggles
-    document.getElementById('setting-allow-seek').addEventListener('change', (e) => {
-      updateSetting({ allowSeek: e.target.checked });
-    });
-
-    document.getElementById('setting-allow-queue').addEventListener('change', (e) => {
-      updateSetting({ allowQueueAdd: e.target.checked });
+    document.getElementById('setting-allow-skip').addEventListener('change', (e) => {
+      updateSetting({ allowSkip: e.target.checked });
     });
 
     // Leave room
@@ -167,15 +165,14 @@ const App = (() => {
   // ─── Player Events ────────────────────────
 
   function bindPlayerEvents() {
-    // Play/Pause button
+    // Play/Pause button (host = broadcast, member = local)
     document.getElementById('btn-play').addEventListener('click', () => {
-      if (!Room.getIsHost()) return;
       togglePlayPause();
     });
 
     // Next
     document.getElementById('btn-next').addEventListener('click', async () => {
-      if (!Room.getIsHost()) return;
+      if (document.getElementById('btn-next').classList.contains('disabled')) return;
       try {
         await SocketClient.emit('sync:next');
       } catch (err) {
@@ -185,26 +182,9 @@ const App = (() => {
 
     // Prev
     document.getElementById('btn-prev').addEventListener('click', async () => {
-      if (!Room.getIsHost()) return;
+      if (document.getElementById('btn-prev').classList.contains('disabled')) return;
       try {
         await SocketClient.emit('sync:prev');
-      } catch (err) {
-        UI.showToast(err.message, 'error');
-      }
-    });
-
-    // Progress bar click (seek)
-    const progressBar = document.getElementById('progress-bar');
-    progressBar.addEventListener('click', async (e) => {
-      if (progressBar.classList.contains('disabled')) return;
-
-      const rect = progressBar.getBoundingClientRect();
-      const pct = (e.clientX - rect.left) / rect.width;
-      const dur = await Player.getDuration();
-      const time = pct * dur;
-
-      try {
-        await SocketClient.emit('sync:seek', { time });
       } catch (err) {
         UI.showToast(err.message, 'error');
       }
@@ -280,17 +260,6 @@ const App = (() => {
     });
 
     SocketClient.on('sync:track-changed', ({ track, playback }) => {
-      // Update queue current index
-      const tracks = Queue.getTracks();
-      const newIndex = tracks.findIndex((t) => t.id === track.id);
-      if (newIndex !== -1) {
-        Queue.setCurrentIndex(newIndex);
-      }
-
-      // Load the track
-      Player.loadTrack(track);
-      updateNowPlaying(track);
-
       if (playback) {
         syncState = playback;
         applyPlaybackState(playback);
@@ -299,8 +268,8 @@ const App = (() => {
 
     SocketClient.on('sync:heartbeat', (state) => {
       if (!state || !state.currentTrack) return;
+      if (isLoadingTrack) return; // Don't correct drift while track is loading
       Player.getCurrentTime().then((localTime) => {
-        // Compensate for network latency when comparing positions
         const networkElapsed = (Date.now() - state.lastSyncAt) / 1000;
         const serverTime = state.currentTime + networkElapsed;
         const drift = Math.abs(localTime - serverTime);
@@ -373,23 +342,41 @@ const App = (() => {
       return;
     }
 
-    const time = await Player.getCurrentTime();
-
-    // Check current state
     const iconPlay = document.getElementById('icon-play');
     const isCurrentlyPlaying = iconPlay.style.display === 'none';
 
-    if (isCurrentlyPlaying) {
-      try {
-        await SocketClient.emit('sync:pause');
-      } catch (err) {
-        UI.showToast(err.message, 'error');
+    if (Room.getIsHost()) {
+      // Host: broadcast play/pause to everyone
+      if (isCurrentlyPlaying) {
+        try {
+          await SocketClient.emit('sync:pause');
+        } catch (err) {
+          UI.showToast(err.message, 'error');
+        }
+      } else {
+        const time = await Player.getCurrentTime();
+        try {
+          await SocketClient.emit('sync:play', { time });
+        } catch (err) {
+          UI.showToast(err.message, 'error');
+        }
       }
     } else {
-      try {
-        await SocketClient.emit('sync:play', { time });
-      } catch (err) {
-        UI.showToast(err.message, 'error');
+      // Member: local pause/resume only
+      if (isCurrentlyPlaying) {
+        Player.pause();
+      } else {
+        // Sync to server position before resuming
+        try {
+          const response = await SocketClient.emit('sync:request-state');
+          if (response.success && response.playback && response.playback.isPlaying) {
+            const elapsed = (Date.now() - response.playback.lastSyncAt) / 1000;
+            Player.seekTo(response.playback.currentTime + elapsed);
+          }
+        } catch (_) {
+          // Ignore, play anyway
+        }
+        Player.play();
       }
     }
   }
@@ -398,19 +385,6 @@ const App = (() => {
 
   function applyPlaybackState(state) {
     if (!state) return;
-
-    let trackChanged = false;
-    if (state.currentTrack) {
-      const playing = Queue.getCurrentTrack();
-      if (!playing || playing.id !== state.currentTrack.id) {
-        trackChanged = true;
-        Player.loadTrack(state.currentTrack);
-        updateNowPlaying(state.currentTrack);
-        const tracks = Queue.getTracks();
-        const idx = tracks.findIndex((t) => t.id === state.currentTrack.id);
-        if (idx !== -1) Queue.setCurrentIndex(idx);
-      }
-    }
 
     const seekAndPlay = () => {
       if (state.isPlaying) {
@@ -424,9 +398,23 @@ const App = (() => {
       }
     };
 
-    // When track just loaded, wait for the player to initialize before seeking/playing
-    if (trackChanged) {
-      setTimeout(seekAndPlay, 1500);
+    if (state.currentTrack && loadedTrackId !== state.currentTrack.id) {
+      // Track changed — load it, then wait before seeking
+      loadedTrackId = state.currentTrack.id;
+      isLoadingTrack = true;
+
+      updateNowPlaying(state.currentTrack);
+      const tracks = Queue.getTracks();
+      const idx = tracks.findIndex((t) => t.id === state.currentTrack.id);
+      if (idx !== -1) Queue.setCurrentIndex(idx);
+
+      Player.loadTrack(state.currentTrack).then(() => {
+        // Extra buffer after player signals load started
+        setTimeout(() => {
+          isLoadingTrack = false;
+          seekAndPlay();
+        }, 800);
+      });
     } else {
       seekAndPlay();
     }
@@ -530,6 +518,8 @@ const App = (() => {
   function leaveRoom() {
     currentRoomCode = null;
     syncState = null;
+    loadedTrackId = null;
+    isLoadingTrack = false;
     history.pushState(null, '', '/');
 
     // Disconnect and reconnect
