@@ -6,8 +6,9 @@
 const App = (() => {
   let currentRoomCode = null;
   let syncState = null;
-  let loadedTrackId = null;   // ID of the track currently loaded in the player
-  let isLoadingTrack = false; // True during the window after loadTrack is called
+  let loadedTrackId = null;    // ID of the track currently loaded in the player
+  let isLoadingTrack = false;  // True during the window after loadTrack is called
+  let pendingSeekState = null; // Latest state to apply once loading completes
 
   // ─── Initialize ───────────────────────────
 
@@ -386,22 +387,22 @@ const App = (() => {
   function applyPlaybackState(state) {
     if (!state) return;
 
-    const seekAndPlay = () => {
-      if (state.isPlaying) {
-        const elapsed = (Date.now() - state.lastSyncAt) / 1000;
-        const targetTime = state.currentTime + elapsed;
-        Player.seekTo(targetTime);
+    const doSeekAndPlay = (s) => {
+      if (s.isPlaying) {
+        const elapsed = (Date.now() - s.lastSyncAt) / 1000;
+        Player.seekTo(s.currentTime + elapsed);
         Player.play();
       } else {
-        Player.seekTo(state.currentTime);
+        Player.seekTo(s.currentTime);
         Player.pause();
       }
     };
 
     if (state.currentTrack && loadedTrackId !== state.currentTrack.id) {
-      // Track changed — load it, then wait before seeking
+      // New track — load it, then apply the latest state once done
       loadedTrackId = state.currentTrack.id;
       isLoadingTrack = true;
+      pendingSeekState = state;
 
       updateNowPlaying(state.currentTrack);
       const tracks = Queue.getTracks();
@@ -409,14 +410,17 @@ const App = (() => {
       if (idx !== -1) Queue.setCurrentIndex(idx);
 
       Player.loadTrack(state.currentTrack).then(() => {
-        // Extra buffer after player signals load started
         setTimeout(() => {
           isLoadingTrack = false;
-          seekAndPlay();
+          doSeekAndPlay(pendingSeekState);
+          pendingSeekState = null;
         }, 800);
       });
+    } else if (isLoadingTrack) {
+      // Same track still loading — store latest state, apply after load
+      pendingSeekState = state;
     } else {
-      seekAndPlay();
+      doSeekAndPlay(state);
     }
   }
 

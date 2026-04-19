@@ -364,16 +364,12 @@ io.on('connection', (socket) => {
 
     const nextTrack = queueManager.nextTrack(roomCode);
     if (nextTrack) {
-      const state = syncManager.setTrack(roomCode, nextTrack);
+      syncManager.setTrack(roomCode, nextTrack);
+      const playState = syncManager.play(roomCode);
       io.to(roomCode).emit('sync:track-changed', {
         track: nextTrack,
-        playback: state,
+        playback: playState,
       });
-      // Auto-play next track
-      setTimeout(() => {
-        const playState = syncManager.play(roomCode);
-        io.to(roomCode).emit('sync:state', playState);
-      }, 1000);
     } else {
       // Queue ended
       const state = syncManager.pause(roomCode);
