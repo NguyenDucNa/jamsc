@@ -181,16 +181,6 @@ const App = (() => {
       }
     });
 
-    // Prev
-    document.getElementById('btn-prev').addEventListener('click', async () => {
-      if (document.getElementById('btn-prev').classList.contains('disabled')) return;
-      try {
-        await SocketClient.emit('sync:prev');
-      } catch (err) {
-        UI.showToast(err.message, 'error');
-      }
-    });
-
     // Volume
     document.getElementById('volume-slider').addEventListener('input', (e) => {
       Player.setVolume(parseInt(e.target.value));
@@ -252,6 +242,14 @@ const App = (() => {
 
     SocketClient.on('queue:track-removed', ({ trackId }) => {
       Queue.removeTrack(trackId);
+    });
+
+    SocketClient.on('queue:tracks-added', ({ tracks: addedTracks }) => {
+      Queue.addBatch(addedTracks);
+    });
+
+    SocketClient.on('queue:reordered', ({ queue }) => {
+      Queue.setQueue(queue);
     });
 
     // Sync events
@@ -474,8 +472,36 @@ const App = (() => {
   // ─── Track Management ─────────────────────
 
   async function addTrack(url) {
+    const isPlaylist = url.includes('youtube.com/playlist') && url.includes('list=');
+
+    if (isPlaylist) {
+      const btn = document.getElementById('btn-add-track');
+      btn.disabled = true;
+      UI.showToast('Đang tải playlist...', 'info');
+      try {
+        const response = await fetch(`/api/resolve-playlist?url=${encodeURIComponent(url)}`);
+        const data = await response.json();
+
+        if (data.error) {
+          UI.showToast(data.error, 'error');
+          return;
+        }
+        if (!data.tracks || data.tracks.length === 0) {
+          UI.showToast('Không tìm thấy bài hát trong playlist', 'error');
+          return;
+        }
+
+        await SocketClient.emit('queue:add-batch', { tracks: data.tracks });
+        UI.showToast(`Đã thêm ${data.tracks.length} bài vào hàng chờ!`, 'success');
+      } catch (err) {
+        UI.showToast(err.message || 'Không thể tải playlist', 'error');
+      } finally {
+        btn.disabled = false;
+      }
+      return;
+    }
+
     try {
-      // Resolve URL via API
       const response = await fetch(`/api/resolve?url=${encodeURIComponent(url)}`);
       const data = await response.json();
 
@@ -484,11 +510,18 @@ const App = (() => {
         return;
       }
 
-      // Add to queue via socket
       await SocketClient.emit('queue:add', { track: data });
       UI.showToast('Đã thêm vào hàng chờ!', 'success');
     } catch (err) {
       UI.showToast(err.message || 'Không thể thêm bài hát', 'error');
+    }
+  }
+
+  async function reorderTracks(trackIds) {
+    try {
+      await SocketClient.emit('queue:reorder', { trackIds });
+    } catch (err) {
+      UI.showToast(err.message || 'Không thể sắp xếp hàng chờ', 'error');
     }
   }
 
@@ -603,6 +636,7 @@ const App = (() => {
     skipToTrack,
     removeTrack,
     addTrack,
+    reorderTracks,
   };
 })();
 

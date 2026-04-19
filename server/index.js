@@ -30,6 +30,25 @@ app.use(express.json());
 // ─── REST API ───────────────────────────────────────────
 
 /**
+ * Resolve a YouTube playlist URL and return an array of track metadata
+ */
+app.get('/api/resolve-playlist', async (req, res) => {
+  const { url } = req.query;
+  if (!url) return res.status(400).json({ error: 'URL is required' });
+
+  try {
+    const tracks = await resolvePlaylist(url);
+    if (!tracks || tracks.length === 0) {
+      return res.status(400).json({ error: 'Không thể tải playlist. Hãy kiểm tra link và thử lại.' });
+    }
+    res.json({ tracks });
+  } catch (err) {
+    console.error('Playlist resolve error:', err);
+    res.status(500).json({ error: 'Không thể xử lý playlist này' });
+  }
+});
+
+/**
  * Resolve a music URL to metadata
  * Detects source type and extracts ID, fetches metadata via oEmbed
  */
@@ -130,6 +149,90 @@ async function resolveUrl(url) {
   }
 
   return null;
+}
+
+/**
+ * Fetch all video IDs and titles from a YouTube playlist page (no API key needed)
+ */
+async function resolvePlaylist(url) {
+  const listMatch = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+  if (!listMatch) return null;
+
+  const playlistId = listMatch[1];
+
+  let html;
+  try {
+    const response = await fetch(`https://www.youtube.com/playlist?list=${playlistId}`, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+    if (!response.ok) return null;
+    html = await response.text();
+  } catch {
+    return null;
+  }
+
+  const videos = [];
+
+  // Try to parse ytInitialData embedded JSON
+  const dataMarker = 'var ytInitialData = ';
+  const markerPos = html.indexOf(dataMarker);
+  if (markerPos !== -1) {
+    const jsonStart = markerPos + dataMarker.length;
+    const scriptClose = html.indexOf(';</script>', jsonStart);
+    if (scriptClose !== -1) {
+      try {
+        const ytData = JSON.parse(html.slice(jsonStart, scriptClose));
+        // Iterative DFS to find all playlistVideoRenderer items (preserves order)
+        const stack = [ytData];
+        let iters = 0;
+        while (stack.length > 0 && videos.length < 50 && iters++ < 100000) {
+          const node = stack.pop();
+          if (!node || typeof node !== 'object') continue;
+          if (Array.isArray(node)) {
+            for (const item of node) stack.push(item);
+            continue;
+          }
+          if (node.playlistVideoRenderer?.videoId) {
+            const v = node.playlistVideoRenderer;
+            videos.push({ videoId: v.videoId, title: v.title?.runs?.[0]?.text || '' });
+            continue;
+          }
+          for (const val of Object.values(node)) {
+            if (val && typeof val === 'object') stack.push(val);
+          }
+        }
+      } catch {
+        // Fall through to regex fallback
+      }
+    }
+  }
+
+  // Fallback: extract unique video IDs via regex
+  if (videos.length === 0) {
+    const seen = new Set();
+    const regex = /"videoId":"([a-zA-Z0-9_-]{11})"/g;
+    let m;
+    while ((m = regex.exec(html)) !== null && videos.length < 50) {
+      if (!seen.has(m[1])) {
+        seen.add(m[1]);
+        videos.push({ videoId: m[1], title: '' });
+      }
+    }
+  }
+
+  if (videos.length === 0) return null;
+
+  return videos.map((v) => ({
+    source: 'youtube',
+    sourceId: v.videoId,
+    url: `https://www.youtube.com/watch?v=${v.videoId}`,
+    title: v.title,
+    thumbnail: `https://img.youtube.com/vi/${v.videoId}/mqdefault.jpg`,
+    duration: 0,
+  }));
 }
 
 // ─── SOCKET.IO ──────────────────────────────────────────
@@ -272,6 +375,62 @@ io.on('connection', (socket) => {
   });
 
   /**
+   * Add multiple tracks to queue at once (playlist support)
+   */
+  socket.on('queue:add-batch', ({ tracks: incoming }, callback) => {
+    const roomCode = roomManager.getRoomBySocket(socket.id);
+    if (!roomCode) return callback?.({ success: false, error: 'Không trong phòng nào' });
+
+    const room = roomManager.getRoom(roomCode);
+    const member = room.members.get(socket.id);
+
+    const { queue: existingQueue } = queueManager.getQueue(roomCode);
+    const wasEmpty = existingQueue.length === 0;
+
+    const addedTracks = [];
+    for (const track of (incoming || []).slice(0, 50)) {
+      track.addedBy = member ? member.name : 'Unknown';
+      track.addedBySocketId = socket.id;
+      const queueItem = queueManager.addToQueue(roomCode, track);
+      addedTracks.push(queueItem);
+    }
+
+    if (addedTracks.length === 0) {
+      return callback?.({ success: false, error: 'Không có bài nào được thêm' });
+    }
+
+    io.to(roomCode).emit('queue:tracks-added', { tracks: addedTracks });
+
+    if (wasEmpty) {
+      const state = syncManager.setTrack(roomCode, addedTracks[0]);
+      io.to(roomCode).emit('sync:track-changed', { track: addedTracks[0], playback: state });
+    }
+
+    console.log(`[Queue] ${member?.name} added ${addedTracks.length} tracks (batch) to room ${roomCode}`);
+    callback?.({ success: true, tracks: addedTracks });
+  });
+
+  /**
+   * Reorder queue tracks
+   */
+  socket.on('queue:reorder', ({ trackIds }, callback) => {
+    const roomCode = roomManager.getRoomBySocket(socket.id);
+    if (!roomCode) return callback?.({ success: false, error: 'Không trong phòng nào' });
+
+    const room = roomManager.getRoom(roomCode);
+    if (room.hostId !== socket.id) {
+      return callback?.({ success: false, error: 'Chỉ host mới có quyền sắp xếp' });
+    }
+
+    const ok = queueManager.reorderQueue(roomCode, trackIds);
+    if (!ok) return callback?.({ success: false, error: 'Lỗi sắp xếp' });
+
+    const queue = queueManager.serializeQueue(roomCode);
+    io.to(roomCode).emit('queue:reordered', { queue });
+    callback?.({ success: true });
+  });
+
+  /**
    * Remove a track from the queue
    */
   socket.on('queue:remove', ({ trackId }, callback) => {
@@ -352,7 +511,7 @@ io.on('connection', (socket) => {
   });
 
   /**
-   * Track ended - move to next
+   * Track ended - remove played track and advance to next
    */
   socket.on('sync:track-ended', (_, callback) => {
     const roomCode = roomManager.getRoomBySocket(socket.id);
@@ -362,16 +521,17 @@ io.on('connection', (socket) => {
     // Only host should trigger track-ended to avoid race conditions
     if (room.hostId !== socket.id) return callback?.({ success: false });
 
-    const nextTrack = queueManager.nextTrack(roomCode);
+    const { removedId, nextTrack } = queueManager.removeCurrentAndGetNext(roomCode);
+
+    if (removedId) {
+      io.to(roomCode).emit('queue:track-removed', { trackId: removedId });
+    }
+
     if (nextTrack) {
       syncManager.setTrack(roomCode, nextTrack);
       const playState = syncManager.play(roomCode);
-      io.to(roomCode).emit('sync:track-changed', {
-        track: nextTrack,
-        playback: playState,
-      });
+      io.to(roomCode).emit('sync:track-changed', { track: nextTrack, playback: playState });
     } else {
-      // Queue ended
       const state = syncManager.pause(roomCode);
       io.to(roomCode).emit('sync:queue-ended', state);
     }
@@ -380,7 +540,7 @@ io.on('connection', (socket) => {
   });
 
   /**
-   * Next track (manual)
+   * Next track (manual) - removes current track before advancing
    */
   socket.on('sync:next', (_, callback) => {
     const roomCode = roomManager.getRoomBySocket(socket.id);
@@ -390,31 +550,16 @@ io.on('connection', (socket) => {
     const isHost = room.hostId === socket.id;
     if (!isHost && !room.settings.allowSkip) return callback?.({ success: false, error: 'Chỉ host mới có quyền chuyển bài' });
 
-    const nextTrack = queueManager.nextTrack(roomCode);
+    const { removedId, nextTrack } = queueManager.removeCurrentAndGetNext(roomCode);
+
+    if (removedId) {
+      io.to(roomCode).emit('queue:track-removed', { trackId: removedId });
+    }
+
     if (nextTrack) {
       syncManager.setTrack(roomCode, nextTrack);
       const playState = syncManager.play(roomCode);
       io.to(roomCode).emit('sync:track-changed', { track: nextTrack, playback: playState });
-    }
-    callback?.({ success: true });
-  });
-
-  /**
-   * Previous track (manual)
-   */
-  socket.on('sync:prev', (_, callback) => {
-    const roomCode = roomManager.getRoomBySocket(socket.id);
-    if (!roomCode) return callback?.({ success: false });
-
-    const room = roomManager.getRoom(roomCode);
-    const isHost = room.hostId === socket.id;
-    if (!isHost && !room.settings.allowSkip) return callback?.({ success: false, error: 'Chỉ host mới có quyền chuyển bài' });
-
-    const prevTrack = queueManager.prevTrack(roomCode);
-    if (prevTrack) {
-      syncManager.setTrack(roomCode, prevTrack);
-      const playState = syncManager.play(roomCode);
-      io.to(roomCode).emit('sync:track-changed', { track: prevTrack, playback: playState });
     }
     callback?.({ success: true });
   });

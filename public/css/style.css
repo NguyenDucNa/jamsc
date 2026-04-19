@@ -1044,8 +1044,7 @@ body {
 
 /* Queue Panel */
 .queue-panel {
-  flex: 1;
-  min-height: 200px;
+  height: 400px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1055,6 +1054,7 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: var(--space-sm);
+  min-height: 0;
 }
 
 .queue-empty {
@@ -1162,6 +1162,36 @@ body {
 
 .queue-item-remove:hover {
   background: rgba(247, 37, 133, 0.15);
+}
+
+.queue-item-drag {
+  width: 20px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  cursor: grab;
+  opacity: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.queue-item:hover .queue-item-drag {
+  opacity: 1;
+}
+
+.queue-item-drag:active {
+  cursor: grabbing;
+}
+
+.queue-item.dragging {
+  opacity: 0.4;
+}
+
+.queue-item.drag-over {
+  border-top: 2px solid var(--accent-cyan);
+  border-radius: 0;
 }
 
 /* Members Panel */

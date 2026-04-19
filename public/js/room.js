@@ -135,22 +135,18 @@ const Room = (() => {
    */
   function updateControlPermissions() {
     const btnPlay = document.getElementById('btn-play');
-    const btnPrev = document.getElementById('btn-prev');
     const btnNext = document.getElementById('btn-next');
 
-    // Everyone can play/pause (host = broadcast, member = local)
     if (btnPlay) btnPlay.classList.remove('disabled');
 
-    // Prev/Next: host always, members only if allowSkip
     const canSkip = isHost || (currentRoom && currentRoom.settings.allowSkip);
-    [btnPrev, btnNext].forEach((btn) => {
-      if (!btn) return;
+    if (btnNext) {
       if (canSkip) {
-        btn.classList.remove('disabled');
+        btnNext.classList.remove('disabled');
       } else {
-        btn.classList.add('disabled');
+        btnNext.classList.add('disabled');
       }
-    });
+    }
   }
 
   /**

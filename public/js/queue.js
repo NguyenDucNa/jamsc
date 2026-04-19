@@ -6,10 +6,8 @@
 const Queue = (() => {
   let tracks = [];
   let currentIndex = -1;
+  let dragSrcIndex = -1;
 
-  /**
-   * Update the queue display
-   */
   function render() {
     const listEl = document.getElementById('queue-list');
     const countEl = document.getElementById('queue-count');
@@ -28,6 +26,8 @@ const Queue = (() => {
       return;
     }
 
+    const isHost = typeof Room !== 'undefined' && Room.getIsHost();
+
     listEl.innerHTML = tracks.map((track, index) => {
       const isActive = index === currentIndex;
       const sourceLabel = track.source === 'youtube' ? 'YT' : 'SC';
@@ -37,7 +37,15 @@ const Queue = (() => {
         : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;color:var(--text-muted);">🎵</div>`;
 
       return `
-        <div class="queue-item ${isActive ? 'active' : ''}" data-track-id="${track.id}" data-index="${index}">
+        <div class="queue-item ${isActive ? 'active' : ''}" data-track-id="${track.id}" data-index="${index}" ${isHost ? 'draggable="true"' : ''}>
+          ${isHost ? `
+          <div class="queue-item-drag" title="Kéo để sắp xếp">
+            <svg width="12" height="16" viewBox="0 0 12 20" fill="currentColor">
+              <circle cx="4" cy="4" r="1.5"/><circle cx="8" cy="4" r="1.5"/>
+              <circle cx="4" cy="10" r="1.5"/><circle cx="8" cy="10" r="1.5"/>
+              <circle cx="4" cy="16" r="1.5"/><circle cx="8" cy="16" r="1.5"/>
+            </svg>
+          </div>` : ''}
           <div class="queue-item-thumb">${thumbHtml}</div>
           <div class="queue-item-info">
             <div class="queue-item-title">${escapeHtml(track.title || 'Loading...')}</div>
@@ -54,11 +62,10 @@ const Queue = (() => {
       `;
     }).join('');
 
-    // Add click handlers
+    // Click to skip
     listEl.querySelectorAll('.queue-item').forEach((item) => {
       item.addEventListener('click', (e) => {
-        // Don't trigger if clicking remove button
-        if (e.target.closest('.queue-item-remove')) return;
+        if (e.target.closest('.queue-item-remove') || e.target.closest('.queue-item-drag')) return;
         const trackId = item.dataset.trackId;
         if (typeof App !== 'undefined' && App.skipToTrack) {
           App.skipToTrack(trackId);
@@ -66,6 +73,7 @@ const Queue = (() => {
       });
     });
 
+    // Remove button
     listEl.querySelectorAll('.queue-item-remove').forEach((btn) => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -75,28 +83,85 @@ const Queue = (() => {
         }
       });
     });
+
+    // Drag-and-drop (host only)
+    if (isHost) {
+      listEl.querySelectorAll('.queue-item[draggable="true"]').forEach((item) => {
+        item.addEventListener('dragstart', (e) => {
+          dragSrcIndex = parseInt(item.dataset.index);
+          item.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(dragSrcIndex));
+        });
+
+        item.addEventListener('dragend', () => {
+          item.classList.remove('dragging');
+          listEl.querySelectorAll('.queue-item').forEach((i) => i.classList.remove('drag-over'));
+        });
+
+        item.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          listEl.querySelectorAll('.queue-item').forEach((i) => i.classList.remove('drag-over'));
+          item.classList.add('drag-over');
+        });
+
+        item.addEventListener('dragleave', (e) => {
+          if (!item.contains(e.relatedTarget)) {
+            item.classList.remove('drag-over');
+          }
+        });
+
+        item.addEventListener('drop', (e) => {
+          e.preventDefault();
+          item.classList.remove('drag-over');
+          const destIndex = parseInt(item.dataset.index);
+          if (dragSrcIndex === -1 || dragSrcIndex === destIndex) return;
+
+          // Capture current track ID before mutation
+          const currentTrackId = currentIndex >= 0 ? tracks[currentIndex]?.id : null;
+
+          // Apply reorder locally for immediate feedback
+          const newTracks = [...tracks];
+          const [moved] = newTracks.splice(dragSrcIndex, 1);
+          newTracks.splice(destIndex, 0, moved);
+          tracks = newTracks;
+
+          // Update currentIndex to follow the playing track
+          if (currentTrackId) {
+            currentIndex = tracks.findIndex((t) => t.id === currentTrackId);
+          }
+
+          render();
+
+          // Broadcast reorder to server
+          const trackIds = tracks.map((t) => t.id);
+          if (typeof App !== 'undefined' && App.reorderTracks) {
+            App.reorderTracks(trackIds);
+          }
+
+          dragSrcIndex = -1;
+        });
+      });
+    }
   }
 
-  /**
-   * Set full queue data
-   */
   function setQueue(data) {
     tracks = data.tracks || [];
     currentIndex = data.currentIndex ?? -1;
     render();
   }
 
-  /**
-   * Add a track
-   */
   function addTrack(track) {
     tracks.push(track);
     render();
   }
 
-  /**
-   * Remove a track
-   */
+  function addBatch(newTracks) {
+    newTracks.forEach((t) => tracks.push(t));
+    render();
+  }
+
   function removeTrack(trackId) {
     const index = tracks.findIndex((t) => t.id === trackId);
     if (index === -1) return;
@@ -112,17 +177,11 @@ const Queue = (() => {
     render();
   }
 
-  /**
-   * Set current track index
-   */
   function setCurrentIndex(index) {
     currentIndex = index;
     render();
   }
 
-  /**
-   * Update track title (after it's loaded by the player)
-   */
   function updateTrackTitle(trackId, title) {
     const track = tracks.find((t) => t.id === trackId);
     if (track) {
@@ -131,9 +190,6 @@ const Queue = (() => {
     }
   }
 
-  /**
-   * Get current track
-   */
   function getCurrentTrack() {
     if (currentIndex >= 0 && currentIndex < tracks.length) {
       return tracks[currentIndex];
@@ -141,16 +197,10 @@ const Queue = (() => {
     return null;
   }
 
-  /**
-   * Get tracks
-   */
   function getTracks() {
     return tracks;
   }
 
-  /**
-   * Escape HTML
-   */
   function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
@@ -161,6 +211,7 @@ const Queue = (() => {
     render,
     setQueue,
     addTrack,
+    addBatch,
     removeTrack,
     setCurrentIndex,
     updateTrackTitle,

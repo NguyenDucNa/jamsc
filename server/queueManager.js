@@ -100,17 +100,49 @@ function nextTrack(roomCode) {
 }
 
 /**
- * Move to the previous track
+ * Remove current track and return the next one (for consume-on-play behavior)
  */
-function prevTrack(roomCode) {
+function removeCurrentAndGetNext(roomCode) {
   const q = queues.get(roomCode);
-  if (!q || q.queue.length === 0) return null;
-
-  if (q.currentIndex > 0) {
-    q.currentIndex--;
-    return q.queue[q.currentIndex];
+  if (!q || q.currentIndex === -1 || q.queue.length === 0) {
+    return { removedId: null, nextTrack: null };
   }
-  return null;
+
+  const removedId = q.queue[q.currentIndex].id;
+  q.queue.splice(q.currentIndex, 1);
+
+  if (q.queue.length === 0) {
+    q.currentIndex = -1;
+    return { removedId, nextTrack: null };
+  }
+
+  if (q.currentIndex >= q.queue.length) {
+    q.currentIndex = q.queue.length - 1;
+  }
+
+  return { removedId, nextTrack: q.queue[q.currentIndex] };
+}
+
+/**
+ * Reorder queue tracks by providing a new ordered list of track IDs
+ */
+function reorderQueue(roomCode, trackIds) {
+  const q = queues.get(roomCode);
+  if (!q) return false;
+
+  const currentTrackId = q.currentIndex >= 0 ? q.queue[q.currentIndex]?.id : null;
+  const trackMap = new Map(q.queue.map((t) => [t.id, t]));
+  const newQueue = trackIds.map((id) => trackMap.get(id)).filter(Boolean);
+
+  if (newQueue.length !== q.queue.length) return false;
+
+  q.queue = newQueue;
+
+  if (currentTrackId) {
+    q.currentIndex = q.queue.findIndex((t) => t.id === currentTrackId);
+  }
+
+  return true;
 }
 
 /**
@@ -170,7 +202,8 @@ module.exports = {
   removeFromQueue,
   getCurrentTrack,
   nextTrack,
-  prevTrack,
+  removeCurrentAndGetNext,
+  reorderQueue,
   skipToTrack,
   getQueue,
   clearQueue,
